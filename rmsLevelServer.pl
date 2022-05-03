@@ -1,42 +1,40 @@
 #!/usr/bin/perl
-{
+package RmsLevelServer {
 
-	package RmsLevelServer;
+use HTTP::Server::Simple::CGI;
+use base qw(HTTP::Server::Simple::CGI);
 
-	use HTTP::Server::Simple::CGI;
-	use base qw(HTTP::Server::Simple::CGI);
+my %dispatch = (
+	'/'     => \&getIndex,
+	'/data' => \&getData,
+);
 
-	my %dispatch = (
-		'/'     => \&getIndex,
-		'/data' => \&getData,
-	);
+sub handle_request {
+	my $self = shift;
+	my $cgi  = shift;
 
-	sub handle_request {
-		my $self = shift;
-		my $cgi  = shift;
+	my $path    = $cgi->path_info();
+	my $handler = $dispatch{$path};
 
-		my $path    = $cgi->path_info();
-		my $handler = $dispatch{$path};
+	if ( ref($handler) eq "CODE" ) {
+		print "HTTP/1.0 200 OK\r\n";
+		$handler->($cgi);
 
-		if ( ref($handler) eq "CODE" ) {
-			print "HTTP/1.0 200 OK\r\n";
-			$handler->($cgi);
-
-		} else {
-			print "HTTP/1.0 404 Not found\r\n";
-			print "Content-type:text/plain; charset=utf-8\n";
-            print "Access-Control-Allow-Origin: *\n";
-			print "\n404 - not found\n";
-		}
-	}
-
-	sub getIndex {
-		my $cgi = shift;
-		return if !ref $cgi;
-		print "Content-type:text/html; charset=utf-8\n";
+	} else {
+		print "HTTP/1.0 404 Not found\r\n";
+		print "Content-type:text/plain; charset=utf-8\n";
         print "Access-Control-Allow-Origin: *\n";
-        print "\n";
-		my $data= q!<\!DOCTYPE html>
+		print "\n404 - not found\n";
+	}
+}
+
+sub getIndex {
+	my $cgi = shift;
+	return if !ref $cgi;
+	print "Content-type:text/html; charset=utf-8\n";
+    print "Access-Control-Allow-Origin: *\n";
+    print "\n";
+	my $data= q!<\!DOCTYPE html>
 <html>		
 <head>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js" type="text/javascript"></script>
@@ -279,34 +277,34 @@
 </body>
 </html>
 	!;
-	    print $data;
-	}
+    print $data;
+}
 
-	sub getData {
-		my $cgi = shift;
-		return if !ref $cgi;
-		my $date = getDate();
-		my $file = "/var/log/wbox/monitor/monitor-$date.log";
-		my $line = `tail -1 $file`;
-		chomp $line;
-		my ( $datetime, $rmsLeftIn, $rmsRightIn, $peakLeftIn, $peakRightIn, $rmsLeftOut, $rmsRightOut, $peakLeftOut, $peakRightOut ) = split( /\t/, $line );
+sub getData {
+	my $cgi = shift;
+	return if !ref $cgi;
+	my $date = getDate();
+	my $file = "/var/log/wbox/monitor/monitor-$date.log";
+	my $line = `tail -1 $file`;
+	chomp $line;
+	my ( $datetime, $rmsLeftIn, $rmsRightIn, $peakLeftIn, $peakRightIn, $rmsLeftOut, $rmsRightOut, $peakLeftOut, $peakRightOut ) = split( /\t/, $line );
 
-		my $content = "Content-type:application/json; charset=utf-8\n";
-        $content .=  "Access-Control-Allow-Origin: *\n";
-        $content .=  "\n";
-		$content .= qq{\{\n};
-		$content .= qq{"datetime":"$datetime", \n};
-		$content .= qq{"in":  \{"rmsLeft":$rmsLeftIn,  "rmsRight":$rmsRightIn,  "peakLeft":$peakLeftIn,  "peakRight":$peakRightIn\},\n};
-		$content .= qq{"out": \{"rmsLeft":$rmsLeftOut, "rmsRight":$rmsRightOut, "peakLeft":$peakLeftOut, "peakRight":$peakRightOut\}\n};
-		$content .= qq{\}\n};
-		print $content. "\n";
-	}
+	my $content = "Content-type:application/json; charset=utf-8\n";
+    $content .=  "Access-Control-Allow-Origin: *\n";
+    $content .=  "\n";
+	$content .= qq{\{\n};
+	$content .= qq{"datetime":"$datetime", \n};
+	$content .= qq{"in":  \{"rmsLeft":$rmsLeftIn,  "rmsRight":$rmsRightIn,  "peakLeft":$peakLeftIn,  "peakRight":$peakRightIn\},\n};
+	$content .= qq{"out": \{"rmsLeft":$rmsLeftOut, "rmsRight":$rmsRightOut, "peakLeft":$peakLeftOut, "peakRight":$peakRightOut\}\n};
+	$content .= qq{\}\n};
+	print $content. "\n";
+}
 
-	sub getDate {
-		( my $sec, my $min, my $hour, my $day, my $month, my $year ) = localtime( time() );
-		my $datetime = sprintf( "%4d-%02d-%02d", $year + 1900, $month + 1, $day );
-		return $datetime;
-	}
+sub getDate {
+	( my $sec, my $min, my $hour, my $day, my $month, my $year ) = localtime( time() );
+	my $datetime = sprintf( "%4d-%02d-%02d", $year + 1900, $month + 1, $day );
+	return $datetime;
+}
 }
 
 # start the server on port 8080
