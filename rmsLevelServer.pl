@@ -20,7 +20,6 @@
 
 		if ( ref($handler) eq "CODE" ) {
 			print "HTTP/1.0 200 OK\r\n";
-			#print STDERR "handleRequest\n";
 			$handler->($cgi);
 
 		} else {
@@ -34,7 +33,6 @@
 	sub getIndex {
 		my $cgi = shift;
 		return if !ref $cgi;
-		#print STDERR "getIndex\n";
 		print "Content-type:text/html; charset=utf-8\n";
         print "Access-Control-Allow-Origin: *\n";
         print "\n";
@@ -287,7 +285,6 @@
 	sub getData {
 		my $cgi = shift;
 		return if !ref $cgi;
-		#print STDERR "getData\n";
 		my $date = getDate();
 		my $file = "/var/log/wbox/monitor/monitor-$date.log";
 		my $line = `tail -1 $file`;
@@ -313,7 +310,6 @@
 }
 
 # start the server on port 8080
-#my $pid = RmsLevelServer->new(8080)->background();
 my $pid = RmsLevelServer->new(8080)->run();
 print "Use 'kill $pid' to stop server.\n";
 
