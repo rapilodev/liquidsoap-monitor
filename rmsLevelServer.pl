@@ -25,7 +25,9 @@
 
 		} else {
 			print "HTTP/1.0 404 Not found\r\n";
-			print "Content-type:text/plain; charset=utf-8\n\n404 - not found\n";
+			print "Content-type:text/plain; charset=utf-8\n";
+            print "Access-Control-Allow-Origin: *\n";
+			print "\n404 - not found\n";
 		}
 	}
 
@@ -33,7 +35,9 @@
 		my $cgi = shift;
 		return if !ref $cgi;
 		#print STDERR "getIndex\n";
-		print "Content-type:text/html; charset=utf-8\n\n";
+		print "Content-type:text/html; charset=utf-8\n";
+        print "Access-Control-Allow-Origin: *\n";
+        print "\n";
 		my $data= q!<\!DOCTYPE html>
 <html>		
 <head>
@@ -290,7 +294,9 @@
 		chomp $line;
 		my ( $datetime, $rmsLeftIn, $rmsRightIn, $peakLeftIn, $peakRightIn, $rmsLeftOut, $rmsRightOut, $peakLeftOut, $peakRightOut ) = split( /\t/, $line );
 
-		my $content = "Content-type:application/json; charset=utf-8\n\n";
+		my $content = "Content-type:application/json; charset=utf-8\n";
+        $content .=  "Access-Control-Allow-Origin: *\n";
+        $content .=  "\n";
 		$content .= qq{\{\n};
 		$content .= qq{"datetime":"$datetime", \n};
 		$content .= qq{"in":  \{"rmsLeft":$rmsLeftIn,  "rmsRight":$rmsRightIn,  "peakLeft":$peakLeftIn,  "peakRight":$peakRightIn\},\n};
