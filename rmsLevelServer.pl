@@ -1,41 +1,46 @@
 #!/usr/bin/perl
+use strict;
+use warnings;
 package RmsLevelServer {
 
 use HTTP::Server::Simple::CGI;
 use base qw(HTTP::Server::Simple::CGI);
+use feature 'state';
+
+use Scalar::Util qw(openhandle);
+use JSON ();
 
 my %dispatch = (
-	'/'     => \&getIndex,
-	'/data' => \&getData,
+    '/'     => \&get_index,
+    '/data' => \&get_data,
 );
 
 sub handle_request {
-	my $self = shift;
-	my $cgi  = shift;
+    my ($self, $cgi)  = @_;
 
-	my $path    = $cgi->path_info();
-	my $handler = $dispatch{$path};
+    my $path    = $cgi->path_info();
+    my $handler = $dispatch{$path};
 
-	if ( ref($handler) eq "CODE" ) {
-		print "HTTP/1.0 200 OK\r\n";
-		$handler->($cgi);
+    if ( ref($handler) eq "CODE" ) {
+        print "HTTP/1.0 200 OK\r\n";
+        $handler->($cgi);
 
-	} else {
-		print "HTTP/1.0 404 Not found\r\n";
-		print "Content-type:text/plain; charset=utf-8\n";
+    } else {
+        print "HTTP/1.0 404 Not found\r\n";
+        print "Content-type:text/plain; charset=utf-8\n";
         print "Access-Control-Allow-Origin: *\n";
-		print "\n404 - not found\n";
-	}
+        print "\n404 - not found\n";
+    }
 }
 
-sub getIndex {
-	my $cgi = shift;
-	return if !ref $cgi;
-	print "Content-type:text/html; charset=utf-8\n";
+sub get_index {
+    my ($cgi) = @_;
+    return if !ref $cgi;
+    print "Content-type:text/html; charset=utf-8\n";
     print "Access-Control-Allow-Origin: *\n";
     print "\n";
-	my $data= q!<\!DOCTYPE html>
-<html>		
+    my $data= q!<\!DOCTYPE html>
+<html>
 <head>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js" type="text/javascript"></script>
     <script>
@@ -81,20 +86,21 @@ sub getIndex {
     function showLevel(){
         $.getJSON( 'data', 
             function(data) {
-                setChannel("#leftIn #peak",   data.in.peakLeft,   "#leftIn #rms",   data.in.rmsLeft);
-                setChannel("#rightIn #peak",  data.in.peakRight,  "#rightIn #rms",  data.in.rmsRight);
-                setChannel("#leftOut #peak",  data.out.peakLeft,  "#leftOut #rms",  data.out.rmsLeft);
-                setChannel("#rightOut #peak", data.out.peakRight, "#rightOut #rms", data.out.rmsRight);
+                $('#error').html(data.error);
+                setChannel("#leftIn #peak",   data.in["peak-left"],   "#leftIn #rms",   data.in["rms-left"]);
+                setChannel("#rightIn #peak",  data.in["peak-right"],  "#rightIn #rms",  data.in["rms-right"]);
+                setChannel("#leftOut #peak",  data.out["peak-left"],  "#leftOut #rms",  data.out["rms-left"]);
+                setChannel("#rightOut #peak", data.out["peak-right"], "#rightOut #rms", data.out["rms-right"]);
             }
         );
     }
 
     function debug(data){
         var content="";
-        content+= " rmsLeft:"+ data.rmsLeft;
-        content+= " rmsRight:"+ data.rmsRight;
-        content+= " peakLeft:"+ data.peakLeft;
-        content+= " peakRight:"+ data.peakRight;
+        content+= " rms-left:"+ data["rms-left"];
+        content+= " rms-right:"+ data["rms-right"];
+        content+= " peak-left:"+ data["peak-left"];
+        content+= " peak-right:"+ data["peak-right"];
         $('#text').html(content)
     }
     
@@ -226,6 +232,11 @@ sub getIndex {
         color:white;
         font-size:3em;
     }
+
+    #error{
+        color:red;
+    }
+
     </style>
 </head>
 
@@ -236,6 +247,7 @@ sub getIndex {
         
     <center>
         <div id="clock"></div>
+        <div id="error"></div>
     </center>
     
     <div id="content" >
@@ -276,38 +288,67 @@ sub getIndex {
     </div>
 </body>
 </html>
-	!;
+    !;
     print $data;
 }
 
-sub getData {
-	my $cgi = shift;
-	return if !ref $cgi;
-	my $date = getDate();
-	my $file = "/var/log/wbox/monitor/monitor-$date.log";
-	my $line = `tail -1 $file`;
-	chomp $line;
-	my ( $datetime, $rmsLeftIn, $rmsRightIn, $peakLeftIn, $peakRightIn, $rmsLeftOut, $rmsRightOut, $peakLeftOut, $peakRightOut ) = split( /\t/, $line );
+my $json_header = "Content-type:application/json; charset=utf-8\n";
+$json_header .=  "Access-Control-Allow-Origin: *\n";
+$json_header .=  "\n";
 
-	my $content = "Content-type:application/json; charset=utf-8\n";
-    $content .=  "Access-Control-Allow-Origin: *\n";
-    $content .=  "\n";
-	$content .= qq{\{\n};
-	$content .= qq{"datetime":"$datetime", \n};
-	$content .= qq{"in":  \{"rmsLeft":$rmsLeftIn,  "rmsRight":$rmsRightIn,  "peakLeft":$peakLeftIn,  "peakRight":$peakRightIn\},\n};
-	$content .= qq{"out": \{"rmsLeft":$rmsLeftOut, "rmsRight":$rmsRightOut, "peakLeft":$peakLeftOut, "peakRight":$peakRightOut\}\n};
-	$content .= qq{\}\n};
-	print $content. "\n";
+sub get_fh {
+    my ($file) = @_;
+    state $old_file;
+    state $old_fh;
+    return $old_fh if $old_file and $old_file eq $file and openhandle $old_fh;
+    open my $fh, '<', $file or return undef;
+    $old_fh = $fh;
+    $old_file = $file;
+    return $fh;
 }
 
-sub getDate {
-	( my $sec, my $min, my $hour, my $day, my $month, my $year ) = localtime( time() );
-	my $datetime = sprintf( "%4d-%02d-%02d", $year + 1900, $month + 1, $day );
-	return $datetime;
+sub get_data {
+    my ($cgi) = @_;
+
+    ( my $sec, my $min, my $hour, my $day, my $month, my $year ) = localtime( time() );
+    my $date = sprintf( "%4d-%02d-%02d", $year + 1900, $month + 1, $day );
+    my $file = "/var/log/wbox/monitor/monitor-$date.log";
+    state $data = '';
+    while (my $fileh = get_fh($file)){
+        my $bytes = sysread $fileh, $data, 65535, length $data;
+        if (!defined $bytes) {
+            close $fileh;
+            return print $json_header, qq!{"error":"read error"}\n!;
+        }
+        last if $bytes == 0;
+        if ($bytes) {
+            my $pos = rindex $data, "\n";
+            next if $pos == -1;
+            if ($pos == length($data)-1) {
+                $pos = rindex $data, "\n", $pos-1;
+                $data = substr($data, $pos) if $pos != -1;
+            }
+        }
+    }
+    state $content = '{}';
+    state $updated_at = 0;
+    if ($data =~ /(.+)\n$/) {
+        my $line = $1;
+        my ( $datetime, $rmsLeftIn, $rmsRightIn, $peakLeftIn, $peakRightIn, $rmsLeftOut, $rmsRightOut, $peakLeftOut, $peakRightOut ) = split /\t/, $line;
+        $content = JSON->new->utf8->canonical->encode({
+            datetime => $datetime,
+            in  => {"rms-left" => $rmsLeftIn,  "rms-right" => $rmsRightIn,   "peak-left" => $peakLeftIn,   "peak-right" => $peakRightIn},
+            out => {"rms-left" => $rmsLeftOut, "rms-right" => $rmsRightOut,  "peak-left" => $peakLeftOut,  "peak-right" => $peakRightOut},
+            error =>  defined $peakRightOut ? '' : 'parse error'
+        });
+        $updated_at = time;
+        $data =~ s/.*\n$//;
+    }
+    print $json_header, (time < $updated_at + 10) ? $content : qq!{"error":"outdated"}\n!;
 }
-}
+
+} # package RmsLevelServer
 
 # start the server on port 8080
 my $pid = RmsLevelServer->new(8080)->run();
-print "Use 'kill $pid' to stop server.\n";
-
+print "Use 'kill $pid' to stop the server.\n";
