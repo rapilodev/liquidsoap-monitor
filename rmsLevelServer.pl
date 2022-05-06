@@ -103,25 +103,18 @@ sub get_index {
         content+= " peak-right:"+ data["peak-right"];
         $('#text').html(content)
     }
+
+    function format_digits(i) {
+        return (i < 10) ? "0" + i : i;
+    }
     
     function updateClock() {
         var now = new Date();
-
-        var hours = now.getHours();
-        var minutes = now.getMinutes();
-        var seconds = now.getSeconds();
-
-        if (hours < 10) {
-            hours = "0" + hours;
-        }
-        if (minutes < 10) {
-            minutes = "0" + minutes;
-        }
-        if (seconds < 10) {
-            seconds = "0" + seconds;
-        }
-
-        $('#clock').html(hours + ':' + minutes + ':' + seconds);
+        $('#clock').html([
+            format_digits(now.getHours()),
+            format_digits(now.getMinutes()),
+            format_digits(now.getSeconds())
+        ].join(":"));
     }    
 
     $( document ).ready(
