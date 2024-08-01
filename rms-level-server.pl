@@ -1,135 +1,103 @@
 #!/usr/bin/env perl
-use strict;
-use warnings;
-use feature 'state';
-use LWP::UserAgent;
-my $port = 7654;
-use Fcntl qw(:flock);
-flock DATA, LOCK_EX | LOCK_NB or die "Unable to lock file $!\n";
-my $index = join '', map {"$_\n"} (
-    "HTTP/1.0 200 OK\r",
-    "Content-type: text/html; charset=utf-8",
-    "Access-Control-Allow-Origin: *",
-    "Cache-Control: no-cache",
-    "",
-    do {local $/; <DATA>}
-);
+use Mojolicious::Lite -signatures;
+use IO::Select;
+use Scalar::Util qw(openhandle);
+use JSON;
 
-package RmsLevelServer {
-    use HTTP::Server::Simple::CGI;
-    use base qw(HTTP::Server::Simple::CGI);
-    use IO::Select();
-    use Scalar::Util qw(openhandle);
-    use JSON();
-
-    sub handle_request {
-        my ($self, $cgi) = @_;
-        my $endpoint = {
-            '/'     => \&get_index,
-            '/data' => \&get_data,
-        }->{$cgi->path_info()};
-        return join '',
-            map {"$_\n"} (
-            "HTTP/1.0 404 Not Found\r",
-            "Content-type: text/plain; charset=utf-8",
-            "Access-Control-Allow-Origin: *",
-            "", "404 - Not Found"
-            ) unless $endpoint;
-        print $endpoint->($cgi);
-    }
-
-    sub get_index { $index }
-
-    sub process_data {
-        my ($data) = @_;
-        state $content    = '{}';
-        state $updated_at = 0;
-        state $json       = JSON->new->utf8->canonical;
-        my $time = time;
-        return $content if $time < $updated_at + 5;
-
-        if ($data =~ /(.*)\n$/) {
-            my $line = (split /\n+/, $1)[-1];
-            my (
-                $datetime,    $rmsLeftIn,   $rmsRightIn,
-                $peakLeftIn,  $peakRightIn, $rmsLeftOut,
-                $rmsRightOut, $peakLeftOut, $peakRightOut
-            ) = split /\t/, $line;
-            $content = $json->encode(
-                {
-                    datetime => $datetime,
-                    in       => {
-                        "rms-left"   => $rmsLeftIn,
-                        "rms-right"  => $rmsRightIn,
-                        "peak-left"  => $peakLeftIn,
-                        "peak-right" => $peakRightIn
-                    },
-                    out => {
-                        "rms-left"   => $rmsLeftOut,
-                        "rms-right"  => $rmsRightOut,
-                        "peak-left"  => $peakLeftOut,
-                        "peak-right" => $peakRightOut
-                    },
-                    error => defined $peakRightOut ? '' : 'parse error'
-                }
-            );
-            $updated_at = $time;
-            $data =~ s/.*\n$//;
-        }
-        return qq!{"error":"outdated"}! if $time > $updated_at + 10;
-        return $content;
-    }
-
-    sub get_fh {
-        my ($file) = @_;
-        state $old_file;
-        state $old_fh;
-        return $old_fh if $old_file && $old_file eq $file && openhandle $old_fh;
-        close $old_fh  if defined $old_fh;
-        open my $fh, '<', $file or return;
-        $old_fh   = $fh;
-        $old_file = $file;
-        return $fh;
-    }
-
-    sub get_data {
-        my ($cgi) = @_;
-        state $json_header = join '',
-            map {"$_\n"} (
-            "HTTP/1.0 200 OK\r",
-            "Content-type: application/json; charset=utf-8",
-            "Access-Control-Allow-Origin: *", ""
-            );
-        state $data = '';
-        my ($sec, $min, $hour, $day, $month, $year) = localtime(time());
-        my $date  = sprintf("%4d-%02d-%02d", $year + 1900, $month + 1, $day);
-        my $file  = "/var/log/wbox/monitor/monitor-$date.log";
-        my $fileh = get_fh($file);
-        return $json_header, qq!{"error":"file not found"}\n!
-            unless $fileh;
-
-        for my $fh (IO::Select->new($fileh)->can_read(0)) {
-            my $bytes = sysread $fh, $data, 65536;
-            if (!defined $bytes) {
-                close $fh;
-                return $json_header, qq!{"error":"read error"}\n!;
-            }
-        }
-        return $json_header, process_data($data);
-    }
+# Serve the index.html file
+get '/' => sub ($c) {
+    $c->res->headers->access_control_allow_origin('*');
+    $c->res->headers->cache_control('no-cache');
+    $c->render(template => 'index');
 };
 
-my $ua = LWP::UserAgent->new;
-$ua->timeout(10);
-RmsLevelServer->new($port)->run();
-while (1) {
-    RmsLevelServer->new($port)->run()
-        unless $ua->get("http://localhost:$port/")->is_success;
-    sleep 60;
+# Serve JSON data
+get '/data' => sub ($c) {
+    $c->res->headers->access_control_allow_origin('*');
+    $c->res->headers->content_type('application/json; charset=utf-8');
+
+    my ($sec, $min, $hour, $day, $month, $year) = localtime(time());
+    my $date = sprintf("%4d-%02d-%02d", $year + 1900, $month + 1, $day);
+    my $file = "/var/log/wbox/monitor/monitor-$date.log";
+
+    my $fileh = get_fh($file);
+    return $c->render(json => {error => 'file not found'}) unless $fileh;
+
+    my $data = '';
+    for my $fh (IO::Select->new($fileh)->can_read(0)) {
+        my $bytes = sysread $fh, $data, 65536;
+        if (!defined $bytes) {
+            close $fh;
+            return $c->render(json => {error => 'read error'});
+        }
+    }
+
+    return $c->render(json => process_data($data));
+};
+
+# Process the data file
+sub process_data {
+    state $content    = {};
+    state $updated_at = 0;
+    my ($data) = @_;
+
+    my $time = time;
+    return $content if $time < $updated_at + 5;
+
+    if ($data =~ /(.*)\n$/) {
+        my $line = (split /\n+/, $1)[-1];
+        my (
+            $datetime,    $rmsLeftIn,   $rmsRightIn,
+            $peakLeftIn,  $peakRightIn, $rmsLeftOut,
+            $rmsRightOut, $peakLeftOut, $peakRightOut
+        ) = split /\t/, $line;
+
+        $content = {
+            datetime => $datetime,
+            in       => {
+                "rms-left"   => $rmsLeftIn,
+                "rms-right"  => $rmsRightIn,
+                "peak-left"  => $peakLeftIn,
+                "peak-right" => $peakRightIn
+            },
+            out => {
+                "rms-left"   => $rmsLeftOut,
+                "rms-right"  => $rmsRightOut,
+                "peak-left"  => $peakLeftOut,
+                "peak-right" => $peakRightOut
+            },
+            error => defined $peakRightOut ? '' : 'parse error'
+        };
+
+        $updated_at = $time;
+        $data =~ s/.*\n$//;
+    }
+
+    return {"error" => "outdated"} if $time > $updated_at + 10;
+    return $content;
 }
+
+# Get file handle
+sub get_fh {
+    state $old_file;
+    state $old_fh;
+    my ($file) = @_;
+
+    return $old_fh if $old_file && $old_file eq $file && openhandle $old_fh;
+
+    close $old_fh if defined $old_fh;
+    open my $fh, '<', $file or return;
+    $old_fh   = $fh;
+    $old_file = $file;
+
+    return $fh;
+}
+
+app->start('daemon', '-l', 'http://*:7654');
 
 __DATA__
 
+@@ index.html.ep
 <!DOCTYPE html>
 <html lang="en">
 <head>
