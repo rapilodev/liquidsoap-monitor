@@ -140,96 +140,230 @@ __DATA__
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dynamic Display</title>
     <style>
-        html, body { background: black; font-family: sans-serif; margin: 0; padding: 0; }
-        #content { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; }
-        .bar { background: black; margin: 0.5em; text-align: center; width: 150px; height: 700px; border: 6px solid #999; position: relative; }
-        #peak, #rms { color: white; font-size: 3rem; width: 100%; position: absolute; left: -6px; border-top: 0; border: 6px solid #999; bottom: 0; height: 0; transition: height 1s linear; }
-        #peak { background: #66ff66; }
-        #peak.mediumPeak { background: yellow !important; }
-        #peak.loudPeak { color: white; background: red !important; }
-        #rms { background: green; }
-        #rms.loudRms { color: white; background: red !important; }
-        #rms.silent { color: black; background: yellow; }
-        #rightIn { margin-right: 3em; }
-        button { position: absolute; top: 0; right: 0; padding: 1em; background: #666; color: white; border: none; cursor: pointer; }
-        #clock { color: white; font-size: 3em; text-align: center; }
-        #error { color: red; text-align: center; }
+
+@font-face {
+    font-family: 'Roboto';
+    font-style: normal;
+    font-weight: 400;
+    src: local('Roboto'), local('Roboto-Regular'),
+         url('fonts/roboto-v18-latin_latin-ext-regular.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'DSEG7-Classic';
+  src: url('fonts/DSEG7Classic-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+}
+
+* {
+    color: #fff;
+    font-family: 'Roboto', sans-serif;
+    padding: 0;
+    margin: 0;
+    transition: all 5s;
+    user-select: none;
+}
+
+body {
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    align-items: center;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    gap: 5vmin;
+}
+
+#clock {
+    color: #fff;
+    font-size: 12vw;
+    position:absolute;
+    z-index:10;
+    text-shadow: 0px 0px 2vmin black;
+    opacity:0.7;
+}
+
+#error {
+    color: red;
+    text-align: center;
+    position:absolute;
+    z-index:10;
+}
+
+#meters {
+    display: flex;
+    background: #002;
+    padding: 1%;
+}
+
+.bar {
+    text-align: center;
+    width: 25vmin;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+    padding: 1vmin;
+    cursor: pointer;
+}
+
+#rms, #peak {
+    font-size: 2vmin;
+    width: 100%;
+    position: absolute;
+    bottom: 0;
+    height: 0%;
+    transition: all 5s linear;
+}
+
+#rmsLabel, #peakLabel {
+    font-size:4vmin;
+    padding:1vmin;
+    text-shadow: 0px 0px 2vmin black;
+    white-space: nowrap;
+}
+
+#peak {
+    color: black;
+    background: #66ff66;
+}
+
+#peak.mediumPeak {
+    background: yellow !important;
+}
+
+#peak.loudPeak {
+    background: red !important;
+}
+
+#rms.loudRms {
+    background: red !important;
+}
+
+#rms.silent {
+    color: black;
+    background: yellow;
+}
+
+#rms {
+    color: white;
+    background: green;
+}
+
+.hidden{
+    display: none;
+}
+
+#in-right {
+    margin-left: 0.5vmax;
+    margin-right: 1vmax;
+}
+
+#out-right {
+    margin-left: 0.5vmax;
+}
+
     </style>
     <script>
+        const levelUrl = 'data';
+
+         const setChannel = (peakId, peak, rmsId, rms) => {
+            document.querySelector(`${peakId} #peakLabel`).innerText = Math.round(peak);
+            document.querySelector(`${rmsId} #rmsLabel`).innerText = Math.round(rms);
+
+            peak *= -1;
+            const peakElem = document.querySelector(peakId);
+            peakElem.classList.toggle("loudPeak", peak < 1);
+            peakElem.classList.toggle("mediumPeak", peak < 3);
+
+            rms *= -1;
+            const rmsElem = document.querySelector(rmsId);
+            rmsElem.classList.toggle("loudRms", rms < 18);
+            rmsElem.classList.toggle("silent", rms > 30);
+
+            peakElem.style.height = `${100 - peak}%`;
+            rmsElem.style.height = `${100 - rms}%`;
+        };
+
+        const showLevel = async () => {
+            try {
+                const response = await fetch(levelUrl);
+                const data = await response.json();
+                document.getElementById("meters").classList.remove("hidden");
+                ["in","out"].forEach(dir => {
+                    ["left", "right"].forEach(channel => {
+                        setChannel(
+                            `#${dir}-${channel} #peak`, data[dir][`peak-${channel}`],
+                            `#${dir}-${channel} #rms`, data[dir][`rms-${channel}`]
+                        );
+                    });
+                });
+            } catch(error) {
+                console.log(error)
+                document.getElementById("meters").classList.add("hidden");
+            };
+        };
+
+        const updateClock = () => {
+            const now = new Date();
+            document.getElementById('clock').textContent = now.toTimeString().split(' ')[0];
+        };
+
         document.addEventListener('DOMContentLoaded', () => {
-            const fetchData = async () => {
-                try {
-                    const response = await fetch('data');
-                    const data = await response.json();
-                    document.getElementById('error').textContent = data.error;
-                    updateChannel('#leftIn', data.in["peak-left"], data.in["rms-left"]);
-                    updateChannel('#rightIn', data.in["peak-right"], data.in["rms-right"]);
-                    updateChannel('#leftOut', data.out["peak-left"], data.out["rms-left"]);
-                    updateChannel('#rightOut', data.out["peak-right"], data.out["rms-right"]);
-                } catch (error) {
-                    console.error('Error fetching data:', error);
-                }
-            };
 
-            const updateClock = () => {
-                const now = new Date();
-                document.getElementById('clock').textContent = now.toTimeString().split(' ')[0];
-            };
+            document.getElementById('meters').addEventListener('click', () => {
+                document.getElementById('in-left').classList.toggle('hidden');
+                document.getElementById('in-right').classList.toggle('hidden');
+            });
 
-            const updateChannel = (selector, peak, rms) => {
-                const peakEl = document.querySelector(`${selector} #peak`);
-                const rmsEl = document.querySelector(`${selector} #rms`);
-                const peakLabel = document.querySelector(`${selector} #peakLabel`);
-                const rmsLabel = document.querySelector(`${selector} #rmsLabel`);
-
-                peakLabel.textContent = Math.round(peak);
-                rmsLabel.textContent = Math.round(rms);
-
-                peak *= -1;
-                rms *= -1;
-
-                peakEl.className = peak < 1 ? 'loudPeak' : peak < 3 ? 'mediumPeak' : '';
-                rmsEl.className = rms < 18 ? 'loudRms' : rms > 30 ? 'silent' : '';
-
-                peakEl.style.height = `${100 - peak}%`;
-                rmsEl.style.height = `${100 - rms}%`;
-            };
-
-            document.getElementById('leftIn').style.display = 'none';
-            document.getElementById('rightIn').style.display = 'none';
-
-            fetchData();
             updateClock();
-            setInterval(fetchData, 5000);
+            setInterval(showLevel, 5000);
             setInterval(updateClock, 1000);
         });
     </script>
 </head>
 <body>
-    <div id="buttons">
-        <button onclick="['leftIn', 'rightIn'].forEach(id => {
-            const el = document.getElementById(id);
-            el.style.display = el.style.display === 'none' ? 'block' : 'none';
-        })">Show Input</button>
-    </div>
     <div id="clock"></div>
     <div id="error"></div>
-    <div id="content">
-        <div id="leftIn" class="bar">
-            <div id="peak"><div id="peakLabel"></div></div>
-            <div id="rms"><div id="rmsLabel"></div></div>
+    <div id="meters">
+        <div id="in-left" class="bar card hidden">
+            <div id="peak">
+                <div id="peakLabel"></div>
+                <div id="rms">
+                    <div id="rmsLabel"></div>
+                    In L
+                </div>
+            </div>
         </div>
-        <div id="rightIn" class="bar">
-            <div id="peak"><div id="peakLabel"></div></div>
-            <div id="rms"><div id="rmsLabel"></div></div>
+        <div id="in-right" class="bar card hidden">
+            <div id="peak">
+                <div id="peakLabel"></div>
+                <div id="rms">
+                    <div id="rmsLabel"></div>
+                    In R
+                </div>
+            </div>
         </div>
-        <div id="leftOut" class="bar">
-            <div id="peak"><div id="peakLabel"></div></div>
-            <div id="rms"><div id="rmsLabel"></div></div>
+
+        <div id="out-left" class="bar card">
+            <div id="peak">
+                <div id="peakLabel"></div>
+                <div id="rms">
+                    <div id="rmsLabel"></div>
+                    Main L
+                </div>
+            </div>
         </div>
-        <div id="rightOut" class="bar">
-            <div id="peak"><div id="peakLabel"></div></div>
-            <div id="rms"><div id="rmsLabel"></div></div>
+        <div id="out-right" class="bar card">
+            <div id="peak">
+                <div id="peakLabel"></div>
+                <div id="rms">
+                    <div id="rmsLabel"></div>
+                    Main R
+                </div>
+            </div>
         </div>
     </div>
 </body>
