@@ -38,11 +38,7 @@ package RmsLevelServer {
         print $endpoint->($cgi);
     }
 
-    sub get_index {
-        my ($cgi) = @_;
-        return unless ref $cgi;
-        return $index;
-    }
+    sub get_index { $index }
 
     sub process_data {
         my ($data) = @_;
@@ -133,6 +129,7 @@ while (1) {
 }
 
 __DATA__
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -140,184 +137,66 @@ __DATA__
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dynamic Display</title>
     <style>
-
-@font-face {
-    font-family: 'Roboto';
-    font-style: normal;
-    font-weight: 400;
-    src: local('Roboto'), local('Roboto-Regular'),
-         url('fonts/roboto-v18-latin_latin-ext-regular.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'DSEG7-Classic';
-  src: url('fonts/DSEG7Classic-Regular.woff2') format('woff2');
-  font-weight: normal;
-  font-style: normal;
-}
-
-* {
-    color: #fff;
-    font-family: 'Roboto', sans-serif;
-    padding: 0;
-    margin: 0;
-    transition: all 5s;
-    user-select: none;
-}
-
-body {
-    background: #000;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-around;
-    align-items: center;
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
-    gap: 5vmin;
-}
-
-#clock {
-    color: #fff;
-    font-size: 12vw;
-    position:absolute;
-    z-index:10;
-    text-shadow: 0px 0px 2vmin black;
-    opacity:0.7;
-}
-
-#error {
-    color: red;
-    text-align: center;
-    position:absolute;
-    z-index:10;
-}
-
-#meters {
-    display: flex;
-    background: #002;
-    padding: 1%;
-}
-
-.bar {
-    text-align: center;
-    width: 25vmin;
-    height: 100vh;
-    overflow: hidden;
-    position: relative;
-    padding: 1vmin;
-    cursor: pointer;
-}
-
-#rms, #peak {
-    font-size: 2vmin;
-    width: 100%;
-    position: absolute;
-    bottom: 0;
-    height: 0%;
-    transition: all 5s linear;
-}
-
-#rmsLabel, #peakLabel {
-    font-size:4vmin;
-    padding:1vmin;
-    text-shadow: 0px 0px 2vmin black;
-    white-space: nowrap;
-}
-
-#peak {
-    color: black;
-    background: #66ff66;
-}
-
-#peak.mediumPeak {
-    background: yellow !important;
-}
-
-#peak.loudPeak {
-    background: red !important;
-}
-
-#rms.loudRms {
-    background: red !important;
-}
-
-#rms.silent {
-    color: black;
-    background: yellow;
-}
-
-#rms {
-    color: white;
-    background: green;
-}
-
-.hidden{
-    display: none;
-}
-
-#in-right {
-    margin-left: 0.5vmax;
-    margin-right: 1vmax;
-}
-
-#out-right {
-    margin-left: 0.5vmax;
-}
-
+        @font-face { font-family: 'Roboto'; src: url('fonts/roboto-v18-latin_latin-ext-regular.woff2') format('woff2'); }
+        @font-face { font-family: 'DSEG7-Classic'; src: url('fonts/DSEG7Classic-Regular.woff2') format('woff2'); }
+        * { color: #fff; font-family: 'Roboto', sans-serif; padding: 0; margin: 0; transition: all 5s; user-select: none; }
+        body { background: #000; display: flex; flex-direction: column; justify-content: space-around; align-items: center; width: 100vw; height: 100vh; overflow: hidden; gap: 5vmin; }
+        #clock { color: #fff; font-size: 12vw; position: absolute; z-index: 10; text-shadow: 0px 0px 2vmin black; opacity: 0.7; }
+        #error { color: red; text-align: center; position: absolute; z-index: 10; }
+        #meters { display: flex; background: #002; padding: 1%; }
+        .bar { text-align: center; width: 25vmin; height: 100vh; overflow: hidden; position: relative; padding: 1vmin; cursor: pointer; }
+        #rms, #peak { font-size: 2vmin; width: 100%; position: absolute; bottom: 0; height: 0%; transition: all 5s linear; }
+        #rmsLabel, #peakLabel { font-size: 4vmin; padding: 1vmin; text-shadow: 0px 0px 2vmin black; white-space: nowrap; }
+        #peak { color: black; background: #66ff66; }
+        #peak.mediumPeak { background: yellow !important; }
+        #peak.loudPeak { background: red !important; }
+        #rms.loudRms { background: red !important; }
+        #rms.silent { color: black; background: yellow; }
+        #rms { color: white; background: green; }
+        .hidden { display: none; }
+        #in-right { margin-left: 0.5vmax; margin-right: 1vmax; }
+        #out-right { margin-left: 0.5vmax; }
     </style>
     <script>
         const levelUrl = 'data';
-
-         const setChannel = (peakId, peak, rmsId, rms) => {
+        const setChannel = (peakId, peak, rmsId, rms) => {
             document.querySelector(`${peakId} #peakLabel`).innerText = Math.round(peak);
             document.querySelector(`${rmsId} #rmsLabel`).innerText = Math.round(rms);
-
             peak *= -1;
             const peakElem = document.querySelector(peakId);
             peakElem.classList.toggle("loudPeak", peak < 1);
             peakElem.classList.toggle("mediumPeak", peak < 3);
-
             rms *= -1;
             const rmsElem = document.querySelector(rmsId);
             rmsElem.classList.toggle("loudRms", rms < 18);
             rmsElem.classList.toggle("silent", rms > 30);
-
             peakElem.style.height = `${100 - peak}%`;
             rmsElem.style.height = `${100 - rms}%`;
         };
-
         const showLevel = async () => {
             try {
                 const response = await fetch(levelUrl);
                 const data = await response.json();
                 document.getElementById("meters").classList.remove("hidden");
-                ["in","out"].forEach(dir => {
+                ["in", "out"].forEach(dir => {
                     ["left", "right"].forEach(channel => {
-                        setChannel(
-                            `#${dir}-${channel} #peak`, data[dir][`peak-${channel}`],
-                            `#${dir}-${channel} #rms`, data[dir][`rms-${channel}`]
-                        );
+                        setChannel(`#${dir}-${channel} #peak`, data[dir][`peak-${channel}`], `#${dir}-${channel} #rms`, data[dir][`rms-${channel}`]);
                     });
                 });
-            } catch(error) {
-                console.log(error)
+            } catch (error) {
+                console.log(error);
                 document.getElementById("meters").classList.add("hidden");
-            };
+            }
         };
-
         const updateClock = () => {
             const now = new Date();
             document.getElementById('clock').textContent = now.toTimeString().split(' ')[0];
         };
-
         document.addEventListener('DOMContentLoaded', () => {
-
             document.getElementById('meters').addEventListener('click', () => {
                 document.getElementById('in-left').classList.toggle('hidden');
                 document.getElementById('in-right').classList.toggle('hidden');
             });
-
             updateClock();
             setInterval(showLevel, 5000);
             setInterval(updateClock, 1000);
@@ -346,7 +225,6 @@ body {
                 </div>
             </div>
         </div>
-
         <div id="out-left" class="bar card">
             <div id="peak">
                 <div id="peakLabel"></div>
